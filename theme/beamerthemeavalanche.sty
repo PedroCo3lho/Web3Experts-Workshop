@@ -1,0 +1,54 @@
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{beamerthemeavalanche}[2026/05/29 v1.0 Avalanche Workshop Theme]
+
+\mode<presentation>
+
+\RequirePackage[utf8]{inputenc}
+\RequirePackage[T1]{fontenc}
+\RequirePackage{graphicx}
+\RequirePackage{tikz}
+\RequirePackage{tcolorbox}
+\RequirePackage{listings}
+\RequirePackage{xcolor}
+\RequirePackage{hyperref}
+\RequirePackage{booktabs}
+\RequirePackage{array}
+
+\tcbuselibrary{skins}
+
+\usecolortheme{avalanche}
+\usefonttheme{avalanche}
+\useinnertheme{avalanche}
+\useoutertheme{avalanche}
+
+% ── CLI listing style ─────────────────────────────────────────────────────────
+\lstdefinestyle{shell}{
+	backgroundcolor=\color{avadark},
+	basicstyle=\ttfamily\small\color{avawhite},
+	keywordstyle=\color{avared},
+	commentstyle=\color{avagraydark},
+	stringstyle=\color{avaaccent},
+	breaklines=true,
+	frame=none,
+	xleftmargin=1em,
+	xrightmargin=1em,
+	aboveskip=0.5em,
+	belowskip=0.5em,
+	showstringspaces=false,
+}
+
+\lstdefinestyle{json}{
+	backgroundcolor=\color{avagray},
+	basicstyle=\ttfamily\scriptsize\color{avatext},
+	keywordstyle=\color{avared},
+	stringstyle=\color{avaredark},
+	breaklines=true,
+	frame=none,
+	xleftmargin=1em,
+	xrightmargin=1em,
+	aboveskip=0.5em,
+	belowskip=0.5em,
+	showstringspaces=false,
+}
+
+\mode<all>

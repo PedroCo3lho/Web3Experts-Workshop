@@ -1,0 +1,565 @@
+\documentclass[aspectratio=169]{beamer}
+
+\usetheme{avalanche}
+
+\hypersetup{
+	colorlinks=true,
+	linkcolor=avared,
+	urlcolor=avared,
+	citecolor=avared,
+}
+
+\title{Implantando uma L1 na Avalanche}
+\subtitle{Workshop · 28 de junho de 2026}
+\author{Pedro Coelho do Nascimento}
+\institute{Team1}
+\date{}
+
+% ══════════════════════════════════════════════════════════════════════════════
+\begin{document}
+% ══════════════════════════════════════════════════════════════════════════════
+
+\begin{frame}[plain]
+	\titlepage
+\end{frame}
+
+% ── Quem Sou Eu ───────────────────────────────────────────────────────────────
+\begin{frame}{Quem Sou Eu}
+	\begin{columns}[c]
+		\begin{column}{0.9\textwidth}
+			{\large\textbf{Pedro Coelho do Nascimento}}\\[0.2em]
+			{\small\textcolor{avagraydark}{Engenheiro Rust Back-end · Desenvolvedor Full-Stack \& Blockchain · São Paulo, Brasil}}
+
+			\vspace{0.8em}
+			\begin{itemize}
+				\item Engenheiro Rust na \textbf{Bipa}: infraestrutura de pagamentos, conformidade com o Banco Central, PLD
+				\item Contribuidor Web3 open-source: ecossistemas \textbf{Starknet}, \textbf{Stellar} (OnlyDust)
+				\item Desenvolvedor na \textbf{Web3EduBrasil}: plataforma de emissão de certificados on-chain
+			\end{itemize}
+
+			\vspace{0.8em}
+			{\small Representando o \textbf{Team1}}
+		\end{column}
+	\end{columns}
+\end{frame}
+
+% ── Agenda ────────────────────────────────────────────────────────────────────
+\begin{frame}{O que Veremos}
+	\begin{columns}[t]
+		\begin{column}{0.48\textwidth}
+			\begin{enumerate}
+				\item Visão geral da arquitetura Avalanche
+				\item O novo modelo de L1 (ACP-77)
+			\end{enumerate}
+		\end{column}
+		\begin{column}{0.48\textwidth}
+			\begin{enumerate}
+				\setcounter{enumi}{2}
+				\item Prática: implantando uma L1
+				\item O que vem a seguir?
+			\end{enumerate}
+		\end{column}
+	\end{columns}
+\end{frame}
+
+% ── Por que uma L1? ───────────────────────────────────────────────────────────
+\begin{frame}{Por que Construir uma L1 na Avalanche?}
+	\framesubtitle{Benefícios de produto e técnicos}
+
+	\begin{columns}[t]
+		\begin{column}{0.32\textwidth}
+			\avabox{Sua própria economia}{
+				\begin{itemize}
+					\item Custom gas token: usuários pagam no seu token, não em AVAX
+					\item Modelo de fee e parâmetros de gas customizados
+					\item Receita de fees fica no seu ecossistema
+				\end{itemize}
+			}
+		\end{column}
+		\begin{column}{0.32\textwidth}
+			\avabox{Soberano por design}{
+				\begin{itemize}
+					\item Seu validator set: permissionado ou permissionless
+					\item Amigável à conformidade: sem exposição à C-Chain pública
+					\item Execução isolada: outras chains não afetam seu throughput
+				\end{itemize}
+			}
+		\end{column}
+		\begin{column}{0.32\textwidth}
+			\avabox{EVM e além}{
+				\begin{itemize}
+					\item Compatibilidade total com EVM: porte contratos existentes
+					\item Precompiles para minting, controle de acesso, fees
+					\item ICM para mensagens cross-chain nativas
+				\end{itemize}
+			}
+		\end{column}
+	\end{columns}
+\end{frame}
+
+\begin{frame}{Para Quem É?}
+	\framesubtitle{Casos de uso comuns}
+
+	\begin{columns}[t]
+		\begin{column}{0.23\textwidth}
+			\avabox{Enterprise}{
+				Validators permissionados, chain privada, conformidade regulatória.
+			}
+		\end{column}
+		\begin{column}{0.23\textwidth}
+			\avabox{Gaming}{
+				Finalidade rápida, UX sem gas para jogadores, token de recompensa customizado.
+			}
+		\end{column}
+		\begin{column}{0.23\textwidth}
+			\avabox{DeFi}{
+				Liquidez isolada, custos previsíveis, liquidação em \textasciitilde1--2s.
+			}
+		\end{column}
+		\begin{column}{0.23\textwidth}
+			\avabox{Pagamentos}{
+				Alto throughput, fees estáveis, token customizado como ativo de liquidação.
+			}
+		\end{column}
+	\end{columns}
+\end{frame}
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Arquitetura Avalanche}
+% ══════════════════════════════════════════════════════════════════════════════
+
+\begin{frame}{A Rede Primária}
+	A \textbf{Rede Primária} é a camada fundamental — todo validator na Avalanche
+	deve validá-la.
+
+	\vspace{0.6em}
+	\begin{columns}[t]
+		\begin{column}{0.32\textwidth}
+			\avabox{P-Chain}{
+				\textbf{Platform Chain}\\[0.3em]
+				Coordena validators, rastreia L1s ativas, gerencia staking.
+			}
+		\end{column}
+		\begin{column}{0.32\textwidth}
+			\avabox{C-Chain}{
+				\textbf{Contract Chain}\\[0.3em]
+				Compatível com EVM. Lar do DeFi, smart contracts, token AVAX.
+			}
+		\end{column}
+		\begin{column}{0.32\textwidth}
+			\avabox{X-Chain}{
+				\textbf{Exchange Chain}\\[0.3em]
+				Baseada em UTXO. Otimizada para criação e transferência rápida de ativos.
+			}
+		\end{column}
+	\end{columns}
+\end{frame}
+
+\begin{frame}[shrink=5]{Snowman Consensus}
+	\framesubtitle{Votação sub-amostrada para finalidade rápida}
+
+	\begin{columns}[c]
+		\begin{column}{0.55\textwidth}
+			\begin{itemize}
+				\item Cada validator amostra repetidamente um pequeno subconjunto aleatório de peers
+				\item Muda preferência quando uma maioria $\alpha_p$ concorda em uma opção diferente
+				\item Incrementa o contador de confiança quando uma maioria $\alpha_c$ confirma a mesma opção
+				\item Decisão finalizada após $\beta$ rodadas consecutivas de confirmação
+			\end{itemize}
+		\end{column}
+		\begin{column}{0.4\textwidth}
+			\avabox{Garantia de segurança}{
+				$$P < \!\left(1 - \frac{\alpha_c}{k}\right)^{\!\beta} \approx 10^{-12}$$
+				Vivacidade requer ${>}75\%$ de stake honesto.
+			}
+		\end{column}
+	\end{columns}
+
+	\vspace{0.3em}
+	{\small\begin{tabular}{@{}lll@{}}
+		\toprule
+		Símbolo & Nome & Padrão \\
+		\midrule
+		$k$          & Sample size (peers consultados por rodada)          & 20 \\
+		$\alpha_p$   & AlphaPreference (votos para mudar preferência)     & 15 \\
+		$\alpha_c$   & AlphaConfidence (votos para incrementar contador)  & 15 \\
+		$\beta$      & Decision threshold (rodadas consecutivas)          & 20 \\
+		\bottomrule
+	\end{tabular}}
+\end{frame}
+
+\begin{frame}{L1s da Avalanche}
+	\framesubtitle{Blockchains independentes com regras customizadas}
+
+	\begin{block}{Definição}
+		Uma L1 da Avalanche é uma blockchain independente com seu próprio validator set,
+		tokenomics e camada de execução. Os validators chegam a consenso e validam
+		apenas essa blockchain.
+	\end{block}
+
+	\vspace{0.5em}
+	\begin{columns}[t]
+		\begin{column}{0.48\textwidth}
+			\textbf{Cada L1 define seu próprio:}
+			\begin{itemize}
+				\item Lógica de execução (VM)
+				\item Estrutura de fees
+				\item Estado e rede
+				\item Modelo de segurança
+			\end{itemize}
+		\end{column}
+		\begin{column}{0.48\textwidth}
+			\textbf{Benefícios na rede:}
+			\begin{itemize}
+				\item Threads de execução independentes
+				\item Maior throughput agregado
+				\item Estado e armazenamento isolados
+				\item Cross-chain via ICM
+			\end{itemize}
+		\end{column}
+	\end{columns}
+\end{frame}
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{ACP-77: Reinventando Subnets}
+% ══════════════════════════════════════════════════════════════════════════════
+
+\begin{frame}{O Modelo Antigo: Subnets}
+	\framesubtitle{Antes do Avalanche9000}
+
+	\begin{columns}[c]
+		\begin{column}{0.55\textwidth}
+			\begin{itemize}
+				\item Validators de Subnet \textbf{obrigados} a validar também a Rede Primária
+				\item Staking obrigatório de \textbf{2.000 AVAX} por validator na Rede Primária
+				\item A \$20/AVAX isso é \textbf{\$40.000 bloqueados por validator}
+				\item Subnet viável mínima precisava de 5 validators = \$200.000
+				\item Validator set gerenciado diretamente na P-Chain pelo dono da Subnet
+			\end{itemize}
+		\end{column}
+		\begin{column}{0.4\textwidth}
+			\avawarning{Gargalo}{
+				Todo validator de Subnet tinha que executar e sincronizar a Rede Primária completa,
+				aumentando custos de hardware e acoplando o desempenho à carga da Rede Primária.
+			}
+		\end{column}
+	\end{columns}
+\end{frame}
+
+\begin{frame}[shrink=5]{Avalanche9000: The Etna Upgrade}
+	\framesubtitle{A maior atualização de rede na história da Avalanche}
+
+	\begin{columns}[t]
+		\begin{column}{0.48\textwidth}
+			\avabox{Barreiras econômicas removidas}{
+				Requisito de staking de 2.000 AVAX \textbf{eliminado}. Validators de L1 pagam apenas uma
+				fee contínua na P-Chain de \textbf{1--10 AVAX/mês} por validator.
+			}
+			\vspace{0.15em}
+			\avabox{Custos operacionais reduzidos}{
+				Validators executam apenas a L1, sem necessidade de sincronizar a Rede Primária.
+				Menores requisitos de hardware, operações mais simples.
+			}
+		\end{column}
+		\begin{column}{0.48\textwidth}
+			\avabox{Conformidade aprimorada}{
+				Validator sets são totalmente separados da Rede Primária.
+				Instituições podem lançar L1s privadas com \textbf{zero exposição} a
+				chains públicas permissionless.
+			}
+			\vspace{0.15em}
+			\avabox{Isolamento de falhas}{
+				Congestionamento ou falhas na Rede Primária não afetam mais o
+				desempenho da L1, e vice-versa.
+			}
+		\end{column}
+	\end{columns}
+
+	\vspace{0.2em}
+	\begin{center}
+		\small\textcolor{avagraydark}{Implementado via ACP-77 (Reinventando Subnets), substitui o ACP-13}
+	\end{center}
+\end{frame}
+
+\begin{frame}{ACP-77: O que Mudou}
+	\framesubtitle{Ativado · Standards Track}
+
+	\begin{columns}[t]
+		\begin{column}{0.32\textwidth}
+			\avabox{1. Separação}{
+				Validators de Subnet não são mais obrigados a validar a Rede Primária.
+				Requisito de 2.000 AVAX removido.
+			}
+		\end{column}
+		\begin{column}{0.32\textwidth}
+			\avabox{2. Soberania}{
+				Gestão do validator set migra da P-Chain para um
+				\textbf{contrato Validator Manager} na própria L1.
+			}
+		\end{column}
+		\begin{column}{0.32\textwidth}
+			\avabox{3. Fees contínuas}{
+				Validators de L1 pagam uma fee contínua para a P-Chain — sem grande
+				staking inicial necessário.
+			}
+		\end{column}
+	\end{columns}
+
+	\vspace{0.5em}
+	\begin{center}
+		\small\textcolor{avagraydark}{ACP-77 substitui o ACP-13 (Subnet-Only Validators)}
+	\end{center}
+\end{frame}
+
+\begin{frame}{Subnet vs.\ L1: Comparação}
+	\begin{center}
+	\renewcommand{\arraystretch}{1.4}
+	\begin{tabular}{@{} l >{\raggedright}p{4.5cm} >{\raggedright\arraybackslash}p{4.5cm} @{}}
+		\toprule
+		& \textbf{Subnet (legado)} & \textbf{L1 (ACP-77)} \\
+		\midrule
+		Validator set    & Deve validar a Rede Primária  & Soberano, set customizado \\
+		Staking          & Mínimo de 2.000 AVAX          & Sem mínimo (fee contínua) \\
+		Gestão do set    & P-Chain / dono da Subnet      & Contrato Validator Manager \\
+		Sinc. Rede Prim. & Sincronização completa        & Apenas headers (sinc. parcial) \\
+		Finalidade       & \textasciitilde1--2 s         & \textasciitilde1--2 s \\
+		Interoperab.     & ICM                           & ICM \\
+		\bottomrule
+	\end{tabular}
+	\end{center}
+\end{frame}
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Implantando Sua L1}
+% ══════════════════════════════════════════════════════════════════════════════
+
+\begin{frame}{O que Vamos Construir}
+	\framesubtitle{Processo de quatro etapas}
+
+	\begin{center}
+	\begin{tikzpicture}[
+		box/.style={
+			rectangle, rounded corners=2pt,
+			draw=avared, fill=avagray,
+			text width=2.6cm, align=center,
+			minimum height=1.2cm, font=\small\sffamily
+		},
+		arr/.style={->, thick, color=avared, >=latex}
+	]
+		\node[box] at (0,0)   (n1) {\textbf{1.} Criar Subnet \& Chain};
+		\node[box] at (3.2,0) (n2) {\textbf{2.} Executar Nó Validator};
+		\node[box] at (6.4,0) (n3) {\textbf{3.} Converter para L1};
+		\node[box] at (9.6,0) (n4) {\textbf{4.} Testar \& Implantar};
+
+		\draw[arr] (n1.east) -- (n2.west);
+		\draw[arr] (n2.east) -- (n3.west);
+		\draw[arr] (n3.east) -- (n4.west);
+	\end{tikzpicture}
+	\end{center}
+
+	\vspace{0.6em}
+	\begin{columns}[t]
+		\begin{column}{0.48\textwidth}
+			\textbf{Pré-requisitos:}
+			\begin{itemize}
+				\item Core Wallet (configurada para Testnet)
+				\item AVAX de Testnet na P-Chain
+				\item Instância AWS EC2 (configuraremos juntos)
+			\end{itemize}
+		\end{column}
+		\begin{column}{0.48\textwidth}
+			\textbf{Ferramentas:}
+			\begin{itemize}
+				\item \href{https://build.avax.network/tools/l1-toolbox}{Avalanche Builder Console}
+				\item Docker no EC2 para AvalancheGo
+				\item MetaMask / Core Wallet para testes de RPC
+			\end{itemize}
+		\end{column}
+	\end{columns}
+\end{frame}
+
+\begin{frame}[shrink=5]{Funções dos Nós}
+	\framesubtitle{Validator · RPC · Combinado}
+
+	\begin{columns}[t]
+		\begin{column}{0.32\textwidth}
+			\avabox{Nó Validator}{
+				\textbf{Porta 9651} (P2P)\\[0.3em]
+				Participa do consenso e produz blocos.
+				RPC vinculado apenas ao \texttt{localhost}. Não exposto publicamente.
+			}
+		\end{column}
+		\begin{column}{0.32\textwidth}
+			\avabox{Nó RPC}{
+				\textbf{Porta 9650} (HTTP)\\[0.3em]
+				Serve JSON-RPC para wallets e dApps.
+				Não faz parte do validator set. Sem papel no consenso.
+			}
+		\end{column}
+		\begin{column}{0.32\textwidth}
+			\avabox{Validator + RPC}{
+				\textbf{Portas 9650 + 9651}\\[0.3em]
+				Ambos os papéis em uma máquina.
+				Operações mais simples, maior uso de recursos.
+				\textbf{O que usamos hoje.}
+			}
+		\end{column}
+	\end{columns}
+
+	\vspace{0.4em}
+	\avabox{Topologia do workshop}{
+		EC2 único executando AvalancheGo em modo \textbf{validator-rpc}.
+		\textbf{9651}: aberta entrada/saída para consenso P2P.
+		\textbf{9650}: vinculada ao localhost; um reverse proxy (nginx / Caddy) na \textbf{443/80} termina TLS e encaminha para ela.
+		Adequado para testnet. Produção separa nós validator e RPC.
+	}
+\end{frame}
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{O que Vem a Seguir?}
+% ══════════════════════════════════════════════════════════════════════════════
+
+\begin{frame}{Customizando Sua L1}
+	\framesubtitle{Precompiles EVM — contratos Solidity em endereços conhecidos}
+
+	\begin{columns}[t]
+		\begin{column}{0.48\textwidth}
+			\begin{itemize}
+				\item \textbf{NativeMinter} — minta seu gas token on-chain
+				\item \textbf{FeeManager} — ajuste a config de fees sem um hard fork
+				\item \textbf{RewardManager} — configure a distribuição de recompensas de bloco
+			\end{itemize}
+		\end{column}
+		\begin{column}{0.48\textwidth}
+			\begin{itemize}
+				\item \textbf{ContractDeployerAllowList} — restrinja quem pode implantar contratos
+				\item \textbf{TxAllowList} — restrinja quem pode enviar transações
+				\item \textbf{WarpMessenger} — envie mensagens cross-chain via ICM
+			\end{itemize}
+		\end{column}
+	\end{columns}
+
+	\vspace{0.25em}
+	\avabox{Habilitar no genesis}{
+		Precompiles são ativadas no \texttt{genesis.json} sob o bloco \texttt{config}.
+		Listas de controle de acesso (AllowList) definem endereços admin e habilitados.
+	}
+\end{frame}
+
+\begin{frame}[shrink=10]{Indo Além}
+	\framesubtitle{Próximos passos naturais do que construímos hoje}
+
+	\begin{columns}[t]
+		\begin{column}{0.48\textwidth}
+			\avabox{PoA $\to$ PoS}{
+				Substitua o gerenciador PoA por um \textbf{Staking Manager}.
+				Qualquer pessoa que faça staking do seu token nativo (ou um ERC-20) pode
+				entrar no validator set, sem aprovação do dono.
+			}
+		\end{column}
+		\begin{column}{0.48\textwidth}
+			\avabox{Governança multisig}{
+				Envolva o gerenciador PoA em um \textbf{Safe multisig} para que nenhuma
+				chave única controle adições/remoções de validators. Crítico antes da mainnet.
+			}
+		\end{column}
+	\end{columns}
+
+	\vspace{0.2em}
+	\begin{columns}[t]
+		\begin{column}{0.48\textwidth}
+			\avabox{ICM: Interchain Messaging}{
+				Envie mensagens arbitrárias entre L1s da Avalanche.
+				Token bridges, lógica de app cross-chain, estado compartilhado.
+				Requer um \textbf{Warp relayer} rodando junto ao seu nó.
+			}
+		\end{column}
+		\begin{column}{0.48\textwidth}
+			\avabox{Além do EVM}{
+				\textbf{HyperSDK}: construa uma VM customizada em Go com controle total
+				sobre estado, execução e modelos de fee. Para quando o EVM não é a resposta.
+			}
+		\end{column}
+	\end{columns}
+\end{frame}
+
+\begin{frame}{Recursos}
+	\begin{columns}[t]
+		\begin{column}{0.48\textwidth}
+			\textbf{Documentação e ferramentas:}
+			\begin{itemize}
+				\item \href{https://build.avax.network}{build.avax.network} — Builder Hub
+				\item \href{https://build.avax.network/tools/l1-toolbox}{L1 Toolbox}
+				\item \href{https://build.avax.network/academy}{Cursos da Academy}
+			\end{itemize}
+
+			\vspace{0.5em}
+			\textbf{ACPs principais:}
+			\begin{itemize}
+				\item ACP-77: Reinventando Subnets
+				\item ACP-13: Subnet-Only Validators (substituído)
+			\end{itemize}
+		\end{column}
+		\begin{column}{0.48\textwidth}
+			\textbf{Comunidade:}
+			\begin{itemize}
+				\item \href{https://discord.gg/avax}{discord.gg/avax}
+				\item \href{https://github.com/ava-labs}{github.com/ava-labs}
+			\end{itemize}
+
+			\vspace{0.5em}
+			\textbf{Código de hoje:}
+			\begin{itemize}
+				\item \cli{ava-labs/avalanchego}
+				\item \cli{ava-labs/subnet-evm}
+				\item \cli{ava-labs/icm-contracts}
+			\end{itemize}
+		\end{column}
+	\end{columns}
+\end{frame}
+
+% ── Conclusão ─────────────────────────────────────────────────────────────────
+\begin{frame}{O que Construímos}
+	\framesubtitle{Do zero a uma L1 Avalanche ao vivo na Fuji}
+
+	\begin{columns}[t]
+		\begin{column}{0.48\textwidth}
+			\avabox{Sua L1: ao vivo na Fuji}{
+				\begin{itemize}
+					\item Subnet e blockchain customizados registrados na P-Chain
+					\item Nó validator AvalancheGo executando via Docker
+					\item Contrato Validator Manager (PoA) implantado
+					\item Endpoint RPC testável com MetaMask / Core
+				\end{itemize}
+			}
+		\end{column}
+		\begin{column}{0.48\textwidth}
+			\avabox{Conceitos-chave abordados}{
+				\begin{itemize}
+					\item Rede Primária: separação P/C/X-Chain
+					\item ACP-77: validator sets soberanos, sem requisito de 2.000 AVAX
+					\item Validator Manager: governança on-chain
+					\item Funções dos nós: validator, RPC, topologia combinada
+				\end{itemize}
+			}
+		\end{column}
+	\end{columns}
+\end{frame}
+
+% ── Perguntas ─────────────────────────────────────────────────────────────────
+\begin{frame}[plain]
+	\begin{tikzpicture}[remember picture, overlay]
+		\fill[avadark] (current page.north west) rectangle (current page.south east);
+		\draw[avared, line width=3pt]
+			(current page.north west) rectangle (current page.south east);
+	\end{tikzpicture}
+	\vfill
+	\begin{center}
+		{\usebeamerfont{title}\usebeamercolor[fg]{title}Perguntas?\par}
+		\vspace{1em}
+		{\usebeamerfont{subtitle}\usebeamercolor[fg]{subtitle}Team1\par}
+	\end{center}
+	\vfill
+\end{frame}
+
+\end{document}

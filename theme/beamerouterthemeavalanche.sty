@@ -1,0 +1,37 @@
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{beamerouterthemeavalanche}[2026/05/29 v1.0 Avalanche Workshop Theme]
+
+% ── Frame title with red rule ─────────────────────────────────────────────────
+\defbeamertemplate*{frametitle}{avalanche}{
+	\begin{beamercolorbox}[wd=\paperwidth, sep=0.45cm]{frametitle}
+		\usebeamerfont{frametitle}\insertframetitle\par%
+		\ifx\insertframesubtitle\@empty\else%
+			{\usebeamerfont{framesubtitle}\usebeamercolor[fg]{framesubtitle}%
+			\insertframesubtitle\par}%
+		\fi%
+	\end{beamercolorbox}%
+	{\color{avared}\hrule height 1.5pt}%
+}
+
+% ── Footline (hidden on title slide) ─────────────────────────────────────────
+\defbeamertemplate*{footline}{avalanche}{
+	\ifnum\c@framenumber=1\else
+		\begin{beamercolorbox}[ht=2.5ex, dp=1.125ex,
+			leftskip=0.4cm, rightskip=0.4cm]{footline}
+			\usebeamerfont{footline}%
+			\textbf{Team1}\ %
+			{\textcolor{avared}{$\diamond$}}\ %
+			\inserttitle%
+			\hfill%
+			\insertframenumber\,/\,\inserttotalframenumber%
+		\end{beamercolorbox}%
+	\fi
+}
+
+% ── Subtle red border on every slide ─────────────────────────────────────────
+\defbeamertemplate*{background}{avalanche}{
+	\begin{tikzpicture}[remember picture, overlay]
+		\draw[avared, line width=2pt]
+			(current page.north west) rectangle (current page.south east);
+	\end{tikzpicture}
+}

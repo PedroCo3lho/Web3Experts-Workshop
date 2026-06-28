@@ -1,0 +1,97 @@
+\NeedsTeXFormat{LaTeX2e}
+\ProvidesPackage{beamerinnerthemeavalanche}[2026/05/29 v1.0 Avalanche Workshop Theme]
+
+% ── Title page ────────────────────────────────────────────────────────────────
+\defbeamertemplate*{title page}{avalanche}{
+	\begin{tikzpicture}[remember picture, overlay]
+		\fill[avadark] (current page.north west) rectangle (current page.south east);
+		\draw[avared, line width=3pt]
+			(current page.north west) rectangle (current page.south east);
+	\end{tikzpicture}
+	\vfill
+	\begin{center}
+		{\usebeamerfont{title}\usebeamercolor[fg]{title}\inserttitle\par}
+		\vspace{0.4em}
+		{\usebeamerfont{subtitle}\usebeamercolor[fg]{subtitle}\insertsubtitle\par}
+		\vspace{1.8em}
+		{\usebeamerfont{institute}\usebeamercolor[fg]{institute}\insertinstitute\par}
+		\vspace{0.3em}
+		{\usebeamerfont{date}\usebeamercolor[fg]{date}\insertdate\par}
+	\end{center}
+	\vfill
+}
+
+% ── Section break frames ──────────────────────────────────────────────────────
+\AtBeginSection[]{
+	\begin{frame}[plain]
+		\begin{tikzpicture}[remember picture, overlay]
+			\fill[avadark] (current page.north west) rectangle (current page.south east);
+			\draw[avared, line width=3pt]
+				(current page.north west) rectangle (current page.south east);
+		\end{tikzpicture}
+		\vspace{1cm}
+		\begin{center}
+			\raggedright
+			{\usebeamercolor[fg]{section header}\usebeamerfont{subtitle}
+				\large Section \thesection}\\[0.5em]
+			\begingroup
+				\setbeamercolor{structure}{fg=avaaccent}
+				{\usebeamercolor[fg]{structure}\usebeamerfont{title}
+					\fontsize{22}{26}\selectfont\insertsectionhead\par}
+			\endgroup
+		\end{center}
+	\end{frame}
+}
+
+% ── Items ─────────────────────────────────────────────────────────────────────
+\setbeamertemplate{itemize item}{\textcolor{avared}{\textbullet}}
+\setbeamertemplate{itemize subitem}{\textcolor{avaredark}{\guillemotright}}
+\setbeamertemplate{itemize subsubitem}{\textcolor{avaaccent}{--}}
+\setbeamertemplate{enumerate items}[default]
+\setbeamertemplate{section in toc}[circle]
+\beamertemplatenavigationsymbolsempty
+
+% ── Definition box ────────────────────────────────────────────────────────────
+\newcommand{\avabox}[2]{%
+	\begin{tcolorbox}[
+		enhanced,
+		colback=avagray,
+		colframe=avared,
+		colbacktitle=avared,
+		coltitle=avawhite,
+		title=#1,
+		fonttitle=\bfseries\sffamily,
+		boxrule=0.4mm,
+		arc=2mm,
+		left=3mm, right=3mm, top=3mm, bottom=3mm,
+		drop shadow={opacity=0.1},
+		sharp corners=southeast,
+		fontupper=\fontsize{9.5pt}{11pt}\selectfont
+	]
+	#2
+	\end{tcolorbox}
+}
+
+% ── Alert / warning box ───────────────────────────────────────────────────────
+\newcommand{\avawarning}[2]{%
+	\begin{tcolorbox}[
+		enhanced,
+		colback=avaaccent!8!avalight,
+		colframe=avaaccent,
+		colbacktitle=avaaccent,
+		coltitle=avadark,
+		title=#1,
+		fonttitle=\bfseries\sffamily,
+		boxrule=0.4mm,
+		arc=2mm,
+		left=3mm, right=3mm, top=3mm, bottom=3mm,
+		drop shadow={opacity=0.1},
+		sharp corners=southeast,
+		fontupper=\fontsize{9.5pt}{11pt}\selectfont
+	]
+	#2
+	\end{tcolorbox}
+}
+
+% ── Inline CLI helper ─────────────────────────────────────────────────────────
+\newcommand{\cli}[1]{\texttt{\textcolor{avared}{#1}}}

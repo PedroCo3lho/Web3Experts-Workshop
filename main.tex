@@ -1,0 +1,567 @@
+\documentclass[aspectratio=169]{beamer}
+
+\usetheme{avalanche}
+
+\hypersetup{
+	colorlinks=true,
+	linkcolor=avared,
+	urlcolor=avared,
+	citecolor=avared,
+}
+
+\title{Deploying an L1 on Avalanche}
+\subtitle{Workshop · June 28, 2026}
+\author{Pedro Coelho do Nascimento}
+\institute{Team1}
+\date{}
+
+% ══════════════════════════════════════════════════════════════════════════════
+\begin{document}
+% ══════════════════════════════════════════════════════════════════════════════
+
+\begin{frame}[plain]
+	\titlepage
+\end{frame}
+
+% ── Who Am I ──────────────────────────────────────────────────────────────────
+\begin{frame}{Who Am I}
+	\begin{columns}[c]
+		\begin{column}{0.9\textwidth}
+			{\large\textbf{Pedro Coelho do Nascimento}}\\[0.2em]
+			{\small\textcolor{avagraydark}{Rust Back-end Engineer · Full-Stack \& Blockchain Developer · São Paulo, Brazil}}
+
+			\vspace{0.8em}
+			\begin{itemize}
+				\item Rust engineer at \textbf{Bipa}: payment infrastructure, Central Bank compliance, AML
+				\item Web3 open-source contributor: \textbf{Starknet}, \textbf{Stellar} ecosystems (OnlyDust)
+				\item Developer at \textbf{Web3EduBrasil}: on-chain certificate issuance platform
+			\end{itemize}
+
+			\vspace{0.8em}
+			{\small Representing \textbf{Team1}}
+		\end{column}
+	\end{columns}
+\end{frame}
+
+% ── Agenda ────────────────────────────────────────────────────────────────────
+\begin{frame}{What We'll Cover}
+	\begin{columns}[t]
+		\begin{column}{0.48\textwidth}
+			\begin{enumerate}
+				\item Avalanche architecture overview
+				\item The new L1 model (ACP-77)
+			\end{enumerate}
+		\end{column}
+		\begin{column}{0.48\textwidth}
+			\begin{enumerate}
+				\setcounter{enumi}{2}
+				\item Hands-on: deploying an L1
+				\item What's next?
+			\end{enumerate}
+		\end{column}
+	\end{columns}
+\end{frame}
+
+% ── Why an L1? ────────────────────────────────────────────────────────────────
+\begin{frame}{Why Build an Avalanche L1?}
+	\framesubtitle{Product and technical benefits}
+
+	\begin{columns}[t]
+		\begin{column}{0.32\textwidth}
+			\avabox{Your own economy}{
+				\begin{itemize}
+					\item Custom gas token: users pay in your token, not AVAX
+					\item Custom fee model and gas parameters
+					\item Fee revenue stays in your ecosystem
+				\end{itemize}
+			}
+		\end{column}
+		\begin{column}{0.32\textwidth}
+			\avabox{Sovereign by design}{
+				\begin{itemize}
+					\item Your validator set: permissioned or permissionless
+					\item Compliance-friendly: no C-Chain exposure
+					\item Isolated execution: other chains cannot affect your throughput
+				\end{itemize}
+			}
+		\end{column}
+		\begin{column}{0.32\textwidth}
+			\avabox{EVM and beyond}{
+				\begin{itemize}
+					\item Full EVM compatibility: port existing contracts
+					\item Precompiles for minting, access control, fees
+					\item ICM for native cross-chain messaging
+				\end{itemize}
+			}
+		\end{column}
+	\end{columns}
+\end{frame}
+
+\begin{frame}{Who Is It For?}
+	\framesubtitle{Common use cases}
+
+	\begin{columns}[t]
+		\begin{column}{0.23\textwidth}
+			\avabox{Enterprise}{
+				Permissioned validators, private chain, regulatory compliance.
+			}
+		\end{column}
+		\begin{column}{0.23\textwidth}
+			\avabox{Gaming}{
+				Fast finality, gas-free UX for players, custom reward token.
+			}
+		\end{column}
+		\begin{column}{0.23\textwidth}
+			\avabox{DeFi}{
+				Isolated liquidity, predictable costs, \textasciitilde1--2s settlement.
+			}
+		\end{column}
+		\begin{column}{0.23\textwidth}
+			\avabox{Payments}{
+				High throughput, stable fees, custom settlement token.
+			}
+		\end{column}
+	\end{columns}
+\end{frame}
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Avalanche Architecture}
+% ══════════════════════════════════════════════════════════════════════════════
+
+\begin{frame}{The Primary Network}
+	The \textbf{Primary Network} is the foundational layer — every validator on Avalanche
+	must validate it.
+
+	\vspace{0.6em}
+	\begin{columns}[t]
+		\begin{column}{0.32\textwidth}
+			\avabox{P-Chain}{
+				\textbf{Platform Chain}\\[0.3em]
+				Coordinates validators, tracks active L1s, manages staking.
+			}
+		\end{column}
+		\begin{column}{0.32\textwidth}
+			\avabox{C-Chain}{
+				\textbf{Contract Chain}\\[0.3em]
+				EVM-compatible. Home of DeFi, smart contracts, AVAX token.
+			}
+		\end{column}
+		\begin{column}{0.32\textwidth}
+			\avabox{X-Chain}{
+				\textbf{Exchange Chain}\\[0.3em]
+				UTXO-based. Optimized for fast asset creation and transfers.
+			}
+		\end{column}
+	\end{columns}
+\end{frame}
+
+\begin{frame}[shrink=5]{Snowman Consensus}
+	\framesubtitle{Sub-sampled voting for fast finality}
+
+	\begin{columns}[c]
+		\begin{column}{0.55\textwidth}
+			\begin{itemize}
+				\item Each validator repeatedly samples a small random subset of peers
+				\item Switches preference when an $\alpha_p$-majority agrees on a different option
+				\item Increments confidence counter when an $\alpha_c$-majority confirms the same option
+				\item Decision finalized after $\beta$ consecutive confirming rounds
+			\end{itemize}
+		\end{column}
+		\begin{column}{0.4\textwidth}
+			\avabox{Safety guarantee}{
+				$$P < \!\left(1 - \frac{\alpha_c}{k}\right)^{\!\beta} \approx 10^{-12}$$
+				Liveness requires ${>}75\%$ honest stake.
+			}
+		\end{column}
+	\end{columns}
+
+	\vspace{0.3em}
+	{\small\begin{tabular}{@{}lll@{}}
+		\toprule
+		Symbol & Name & Default \\
+		\midrule
+		$k$          & Sample size (peers queried per round)            & 20 \\
+		$\alpha_p$   & AlphaPreference (votes to switch preference)     & 15 \\
+		$\alpha_c$   & AlphaConfidence (votes to increment counter)     & 15 \\
+		$\beta$      & Decision threshold (consecutive rounds)          & 20 \\
+		\bottomrule
+	\end{tabular}}
+\end{frame}
+
+\begin{frame}{Avalanche L1s}
+	\framesubtitle{Independent blockchains with custom rules}
+
+	\begin{block}{Definition}
+		An Avalanche L1 is an independent blockchain with its own validator set,
+		tokenomics, and execution layer. Validators come to consensus and validate
+		only that blockchain.
+	\end{block}
+
+	\vspace{0.5em}
+	\begin{columns}[t]
+		\begin{column}{0.48\textwidth}
+			\textbf{Each L1 specifies its own:}
+			\begin{itemize}
+				\item Execution logic (VM)
+				\item Fee structure
+				\item State and networking
+				\item Security model
+			\end{itemize}
+		\end{column}
+		\begin{column}{0.48\textwidth}
+			\textbf{Network-level benefits:}
+			\begin{itemize}
+				\item Independent execution threads
+				\item Higher aggregate throughput
+				\item Isolated state and storage
+				\item Cross-chain via ICM
+			\end{itemize}
+		\end{column}
+	\end{columns}
+\end{frame}
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{ACP-77: Reinventing Subnets}
+% ══════════════════════════════════════════════════════════════════════════════
+
+\begin{frame}{The Old Model: Subnets}
+	\framesubtitle{Before Avalanche9000}
+
+	\begin{columns}[c]
+		\begin{column}{0.55\textwidth}
+			\begin{itemize}
+				\item Subnet validators \textbf{required} to also validate the Primary Network
+				\item Mandatory \textbf{2,000 AVAX} stake per validator on Primary Network
+				\item At \$20/AVAX that's \textbf{\$40,000 locked per validator}
+				\item Minimum viable Subnet needed 5 validators = \$200,000
+				\item Validator set managed directly on the P-Chain by the Subnet owner
+			\end{itemize}
+		\end{column}
+		\begin{column}{0.4\textwidth}
+			\avawarning{Bottleneck}{
+				Every Subnet validator had to run and sync the full Primary Network,
+				increasing hardware costs and coupling performance to Primary Network load.
+			}
+		\end{column}
+	\end{columns}
+\end{frame}
+
+\begin{frame}[shrink=5]{Avalanche9000: The Etna Upgrade}
+	\framesubtitle{The largest network upgrade in Avalanche's history}
+
+	\begin{columns}[t]
+		\begin{column}{0.48\textwidth}
+			\avabox{Economic barriers removed}{
+				2,000 AVAX stake requirement \textbf{eliminated}. L1 validators pay only a
+				continuous P-Chain fee of \textbf{1--10 AVAX/month} per validator.
+			}
+			\vspace{0.15em}
+			\avabox{Running costs reduced}{
+				Validators only run the L1, no need to sync the Primary Network.
+				Lower hardware requirements, simpler ops.
+			}
+		\end{column}
+		\begin{column}{0.48\textwidth}
+			\avabox{Improved compliance}{
+				Validator sets are fully separate from the Primary Network.
+				Institutions can launch private L1s with \textbf{zero exposure} to public
+				permissionless chains.
+			}
+			\vspace{0.15em}
+			\avabox{Fault isolation}{
+				Congestion or outages on the Primary Network no longer affect L1
+				performance, and vice versa.
+			}
+		\end{column}
+	\end{columns}
+
+	\vspace{0.2em}
+	\begin{center}
+		\small\textcolor{avagraydark}{Implemented via ACP-77 (Reinventing Subnets), supersedes ACP-13}
+	\end{center}
+\end{frame}
+
+\begin{frame}{ACP-77: What Changed}
+	\framesubtitle{Activated · Standards Track}
+
+	\begin{columns}[t]
+		\begin{column}{0.32\textwidth}
+			\avabox{1. Separation}{
+				Subnet validators no longer required to validate the Primary Network.
+				2,000 AVAX requirement removed.
+			}
+		\end{column}
+		\begin{column}{0.32\textwidth}
+			\avabox{2. Sovereignty}{
+				Validator set management moves from P-Chain to a
+				\textbf{Validator Manager contract} on the L1 itself.
+			}
+		\end{column}
+		\begin{column}{0.32\textwidth}
+			\avabox{3. Continuous fees}{
+				L1 validators pay a continuous fee to the P-Chain — no large upfront
+				stake needed.
+			}
+		\end{column}
+	\end{columns}
+
+	\vspace{0.5em}
+	\begin{center}
+		\small\textcolor{avagraydark}{ACP-77 supersedes ACP-13 (Subnet-Only Validators)}
+	\end{center}
+\end{frame}
+
+\begin{frame}{Subnet vs.\ L1: Side by Side}
+	\begin{center}
+	\renewcommand{\arraystretch}{1.4}
+	\begin{tabular}{@{} l >{\raggedright}p{4.5cm} >{\raggedright\arraybackslash}p{4.5cm} @{}}
+		\toprule
+		& \textbf{Subnet (legacy)} & \textbf{L1 (ACP-77)} \\
+		\midrule
+		Validator set    & Must validate Primary Network & Sovereign, custom set \\
+		Stake required   & 2,000 AVAX minimum            & No minimum (continuous fee) \\
+		Set management   & P-Chain / subnet owner        & Validator Manager contract \\
+		Primary net sync & Full sync required            & Header-only (partial sync) \\
+		Finality         & ~1–2 s                        & ~1–2 s \\
+		Interoperability & ICM                           & ICM \\
+		\bottomrule
+	\end{tabular}
+	\end{center}
+\end{frame}
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{Deploying Your L1}
+% ══════════════════════════════════════════════════════════════════════════════
+
+\begin{frame}{What We're Building}
+	\framesubtitle{Four-step process}
+
+	\begin{center}
+	\begin{tikzpicture}[
+		box/.style={
+			rectangle, rounded corners=2pt,
+			draw=avared, fill=avagray,
+			text width=2.6cm, align=center,
+			minimum height=1.2cm, font=\small\sffamily
+		},
+		arr/.style={->, thick, color=avared, >=latex}
+	]
+		\node[box] at (0,0)   (n1) {\textbf{1.} Create Subnet \& Chain};
+		\node[box] at (3.2,0) (n2) {\textbf{2.} Run a Validator Node};
+		\node[box] at (6.4,0) (n3) {\textbf{3.} Convert to L1};
+		\node[box] at (9.6,0) (n4) {\textbf{4.} Test \& Deploy};
+
+		\draw[arr] (n1.east) -- (n2.west);
+		\draw[arr] (n2.east) -- (n3.west);
+		\draw[arr] (n3.east) -- (n4.west);
+	\end{tikzpicture}
+	\end{center}
+
+	\vspace{0.6em}
+	\begin{columns}[t]
+		\begin{column}{0.48\textwidth}
+			\textbf{Prerequisites:}
+			\begin{itemize}
+				\item Core Wallet (set to Testnet)
+				\item Testnet AVAX on P-Chain
+				\item AWS EC2 instance (we'll set it up together)
+			\end{itemize}
+		\end{column}
+		\begin{column}{0.48\textwidth}
+			\textbf{Tools:}
+			\begin{itemize}
+				\item \href{https://build.avax.network/tools/l1-toolbox}{Avalanche Builder Console}
+				\item Docker on EC2 for AvalancheGo
+				\item MetaMask / Core Wallet for RPC testing
+			\end{itemize}
+		\end{column}
+	\end{columns}
+\end{frame}
+
+\begin{frame}[shrink=5]{Node Roles}
+	\framesubtitle{Validator · RPC · Combined}
+
+	\begin{columns}[t]
+		\begin{column}{0.32\textwidth}
+			\avabox{Validator node}{
+				\textbf{Port 9651} (P2P)\\[0.3em]
+				Participates in consensus and produces blocks.
+				RPC bound to \texttt{localhost} only. Not exposed publicly.
+			}
+		\end{column}
+		\begin{column}{0.32\textwidth}
+			\avabox{RPC node}{
+				\textbf{Port 9650} (HTTP)\\[0.3em]
+				Serves JSON-RPC to wallets and dApps.
+				Not part of the validator set. No consensus role.
+			}
+		\end{column}
+		\begin{column}{0.32\textwidth}
+			\avabox{Validator + RPC}{
+				\textbf{Ports 9650 + 9651}\\[0.3em]
+				Both roles on one machine.
+				Simpler ops, higher resource use.
+				\textbf{What we use today.}
+			}
+		\end{column}
+	\end{columns}
+
+	\vspace{0.4em}
+	\avabox{Workshop topology}{
+		Single EC2 running AvalancheGo in \textbf{validator-rpc} mode.
+		\textbf{9651}: open inbound/outbound for P2P consensus.
+		\textbf{9650}: bound to localhost; a reverse proxy (nginx / Caddy) on \textbf{443/80} terminates TLS and forwards to it.
+		Adequate for testnet. Production separates validator and RPC nodes.
+	}
+\end{frame}
+
+% ══════════════════════════════════════════════════════════════════════════════
+\section{What's Next?}
+% ══════════════════════════════════════════════════════════════════════════════
+
+\begin{frame}{Customizing Your L1}
+	\framesubtitle{EVM precompiles — Solidity contracts at known addresses}
+
+	\begin{columns}[t]
+		\begin{column}{0.48\textwidth}
+			\begin{itemize}
+				\item \textbf{NativeMinter} — mint your gas token on-chain
+				\item \textbf{FeeManager} — adjust fee config without a hard fork
+				\item \textbf{RewardManager} — configure block reward distribution
+			\end{itemize}
+		\end{column}
+		\begin{column}{0.48\textwidth}
+			\begin{itemize}
+				\item \textbf{ContractDeployerAllowList} — restrict who can deploy contracts
+				\item \textbf{TxAllowList} — restrict who can send transactions
+				\item \textbf{WarpMessenger} — send cross-chain messages via ICM
+			\end{itemize}
+		\end{column}
+	\end{columns}
+
+	\vspace{0.25em}
+	\avabox{Enable in genesis}{
+		Precompiles are activated in \texttt{genesis.json} under the
+		\texttt{config} block. Access control lists define admin
+		and enabled addresses.
+	}
+\end{frame}
+
+\begin{frame}[shrink=10]{Going Further}
+	\framesubtitle{Natural next steps from what we built today}
+
+	\begin{columns}[t]
+		\begin{column}{0.48\textwidth}
+			\avabox{PoA $\to$ PoS}{
+				Replace the PoA manager with a \textbf{Staking Manager}.
+				Anyone who stakes your native token (or an ERC-20) can join the
+				validator set, no owner approval needed.
+			}
+		\end{column}
+		\begin{column}{0.48\textwidth}
+			\avabox{Multisig governance}{
+				Wrap the PoA manager in a \textbf{Safe multisig} so no single key
+				controls validator adds/removes. Critical before mainnet.
+			}
+		\end{column}
+	\end{columns}
+
+	\vspace{0.2em}
+	\begin{columns}[t]
+		\begin{column}{0.48\textwidth}
+			\avabox{ICM: Interchain Messaging}{
+				Send arbitrary messages between Avalanche L1s.
+				Token bridges, cross-chain app logic, shared state.
+				Needs a \textbf{Warp relayer} running alongside your node.
+			}
+		\end{column}
+		\begin{column}{0.48\textwidth}
+			\avabox{Beyond EVM}{
+				\textbf{HyperSDK}: build a custom VM in Go with full control
+				over state, execution, and fee models. For when the EVM is
+				the bottleneck, not the answer.
+			}
+		\end{column}
+	\end{columns}
+\end{frame}
+
+\begin{frame}{Resources}
+	\begin{columns}[t]
+		\begin{column}{0.48\textwidth}
+			\textbf{Documentation \& tooling:}
+			\begin{itemize}
+				\item \href{https://build.avax.network}{build.avax.network} — Builder Hub
+				\item \href{https://build.avax.network/tools/l1-toolbox}{L1 Toolbox}
+				\item \href{https://build.avax.network/academy}{Academy courses}
+			\end{itemize}
+
+			\vspace{0.5em}
+			\textbf{Key ACPs:}
+			\begin{itemize}
+				\item ACP-77: Reinventing Subnets
+				\item ACP-13: Subnet-Only Validators (superseded)
+			\end{itemize}
+		\end{column}
+		\begin{column}{0.48\textwidth}
+			\textbf{Community:}
+			\begin{itemize}
+				\item \href{https://discord.gg/avax}{discord.gg/avax}
+				\item \href{https://github.com/ava-labs}{github.com/ava-labs}
+			\end{itemize}
+
+			\vspace{0.5em}
+			\textbf{Today's code:}
+			\begin{itemize}
+				\item \cli{ava-labs/avalanchego}
+				\item \cli{ava-labs/subnet-evm}
+				\item \cli{ava-labs/icm-contracts}
+			\end{itemize}
+		\end{column}
+	\end{columns}
+\end{frame}
+
+% ── Conclusion ────────────────────────────────────────────────────────────────
+\begin{frame}{What We Built}
+	\framesubtitle{From zero to a live Avalanche L1 on Fuji}
+
+	\begin{columns}[t]
+		\begin{column}{0.48\textwidth}
+			\avabox{Your L1: live on Fuji}{
+				\begin{itemize}
+					\item Custom subnet \& blockchain registered on P-Chain
+					\item AvalancheGo validator node running via Docker
+					\item Validator Manager contract (PoA) deployed
+					\item RPC endpoint testable with MetaMask / Core
+				\end{itemize}
+			}
+		\end{column}
+		\begin{column}{0.48\textwidth}
+			\avabox{Key concepts covered}{
+				\begin{itemize}
+					\item Primary Network: P/C/X-Chain separation
+					\item ACP-77: sovereign validator sets, no 2,000 AVAX requirement
+					\item Validator Manager: on-chain governance
+					\item Node roles: validator, RPC, combined topology
+				\end{itemize}
+			}
+		\end{column}
+	\end{columns}
+\end{frame}
+
+% ── Q&A ───────────────────────────────────────────────────────────────────────
+\begin{frame}[plain]
+	\begin{tikzpicture}[remember picture, overlay]
+		\fill[avadark] (current page.north west) rectangle (current page.south east);
+		\draw[avared, line width=3pt]
+			(current page.north west) rectangle (current page.south east);
+	\end{tikzpicture}
+	\vfill
+	\begin{center}
+		{\usebeamerfont{title}\usebeamercolor[fg]{title}Questions?\par}
+		\vspace{1em}
+		{\usebeamerfont{subtitle}\usebeamercolor[fg]{subtitle}Team1\par}
+	\end{center}
+	\vfill
+\end{frame}
+
+\end{document}
